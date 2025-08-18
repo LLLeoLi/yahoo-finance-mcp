@@ -137,12 +137,12 @@ async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = T
     
     # Validate date format
     try:
-        target_date = pd.to_datetime(date)
+        target_date = pd.to_datetime(date).tz_localize(None)  # Remove timezone info
     except Exception as e:
         return f"Error: Invalid date format '{date}'. Please use YYYY-MM-DD format, e.g. '2024-01-15'"
     
     # Check if date is in the future
-    if target_date > pd.Timestamp.now():
+    if target_date > pd.Timestamp.now().tz_localize(None):  # Remove timezone info for comparison
         return f"Error: Cannot get stock price for future date {date}"
     
     try:
@@ -157,6 +157,8 @@ async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = T
             
             # Find the closest date
             hist_data = hist_data.reset_index()
+            # Remove timezone info from Date column for comparison
+            hist_data['Date'] = hist_data['Date'].dt.tz_localize(None)
             hist_data['date_diff'] = abs(hist_data['Date'] - target_date)
             closest_row = hist_data.loc[hist_data['date_diff'].idxmin()]
             
@@ -165,12 +167,13 @@ async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = T
                 "ticker": ticker,
                 "requested_date": date,
                 "actual_date": closest_row['Date'].strftime('%Y-%m-%d'),
-                "open": closest_row['Open'],
-                "high": closest_row['High'], 
-                "low": closest_row['Low'],
-                "close": closest_row['Close'],
-                "volume": closest_row['Volume'],
-                "adj_close": closest_row['Adj Close']
+                "open": float(closest_row['Open']),
+                "high": float(closest_row['High']), 
+                "low": float(closest_row['Low']),
+                "close": float(closest_row['Close']),
+                "volume": int(closest_row['Volume']),
+                "dividends": float(closest_row.get('Dividends', 0)),
+                "stock_splits": float(closest_row.get('Stock Splits', 0))
             }
             
             if closest_row['Date'].strftime('%Y-%m-%d') != date:
@@ -187,17 +190,20 @@ async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = T
             
             # Get the exact date data
             hist_data = hist_data.reset_index()
+            # Remove timezone info from Date column
+            hist_data['Date'] = hist_data['Date'].dt.tz_localize(None)
             row = hist_data.iloc[0]
             
             result = {
                 "ticker": ticker,
                 "date": row['Date'].strftime('%Y-%m-%d'),
-                "open": row['Open'],
-                "high": row['High'],
-                "low": row['Low'], 
-                "close": row['Close'],
-                "volume": row['Volume'],
-                "adj_close": row['Adj Close']
+                "open": float(row['Open']),
+                "high": float(row['High']),
+                "low": float(row['Low']), 
+                "close": float(row['Close']),
+                "volume": int(row['Volume']),
+                "dividends": float(row.get('Dividends', 0)),
+                "stock_splits": float(row.get('Stock Splits', 0))
             }
         
         return json.dumps(result)
