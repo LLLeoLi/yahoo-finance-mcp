@@ -40,6 +40,7 @@ This server is used to get information about a given ticker symbol from yahoo fi
 
 Available tools:
 - get_historical_stock_prices: Get historical stock prices for a given ticker symbol from yahoo finance. Include the following information: Date, Open, High, Low, Close, Volume, Adj Close.
+- get_stock_price_by_date: Get stock price for a specific date. More efficient than historical prices when you only need one date. Can find nearest trading day for weekends/holidays.
 - get_stock_info: Get stock information for a given ticker symbol from yahoo finance. Include the following information: Stock Price & Trading Info, Company Information, Financial Metrics, Earnings & Revenue, Margins & Returns, Dividends, Balance Sheet, Ownership, Analyst Coverage, Risk Metrics, Other.
 - get_yahoo_finance_news: Get news for a given ticker symbol from yahoo finance.
 - get_stock_actions: Get stock dividends and stock splits for a given ticker symbol from yahoo finance.
@@ -99,6 +100,111 @@ async def get_historical_stock_prices(
     hist_data = hist_data.reset_index(names="Date")
     hist_data = hist_data.to_json(orient="records", date_format="iso")
     return hist_data
+
+
+@yfinance_server.tool(
+    name="get_stock_price_by_date",
+    description="""Get stock price for a specific date. This tool is more efficient than getting historical prices when you only need data for one specific date.
+
+Args:
+    ticker: str
+        The ticker symbol of the stock to get price for, e.g. "AAPL"
+    date: str
+        The specific date to get price for (format: 'YYYY-MM-DD'), e.g. "2024-01-15"
+    find_nearest: bool
+        If True and the exact date has no trading data (weekend/holiday), return the nearest trading day data.
+        If False, return error for non-trading days. Default is True.
+""",
+)
+async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = True) -> str:
+    """Get stock price for a specific date
+    
+    Args:
+        ticker: The ticker symbol of the stock
+        date: The specific date (format: 'YYYY-MM-DD')
+        find_nearest: Whether to find nearest trading day if exact date has no data
+    """
+    import datetime
+    
+    company = yf.Ticker(ticker)
+    try:
+        if company.isin is None:
+            print(f"Company ticker {ticker} not found.")
+            return f"Company ticker {ticker} not found."
+    except Exception as e:
+        print(f"Error: getting stock price for {ticker}: {e}")
+        return f"Error: getting stock price for {ticker}: {e}"
+    
+    # Validate date format
+    try:
+        target_date = pd.to_datetime(date)
+    except Exception as e:
+        return f"Error: Invalid date format '{date}'. Please use YYYY-MM-DD format, e.g. '2024-01-15'"
+    
+    # Check if date is in the future
+    if target_date > pd.Timestamp.now():
+        return f"Error: Cannot get stock price for future date {date}"
+    
+    try:
+        if find_nearest:
+            # Get data for a wider range to find nearest trading day
+            start_date = target_date - pd.Timedelta(days=7)
+            end_date = target_date + pd.Timedelta(days=7)
+            hist_data = company.history(start=start_date, end=end_date, interval="1d")
+            
+            if hist_data.empty:
+                return f"No trading data found for {ticker} around date {date}"
+            
+            # Find the closest date
+            hist_data = hist_data.reset_index()
+            hist_data['date_diff'] = abs(hist_data['Date'] - target_date)
+            closest_row = hist_data.loc[hist_data['date_diff'].idxmin()]
+            
+            # Format the result
+            result = {
+                "ticker": ticker,
+                "requested_date": date,
+                "actual_date": closest_row['Date'].strftime('%Y-%m-%d'),
+                "open": closest_row['Open'],
+                "high": closest_row['High'], 
+                "low": closest_row['Low'],
+                "close": closest_row['Close'],
+                "volume": closest_row['Volume'],
+                "adj_close": closest_row['Adj Close']
+            }
+            
+            if closest_row['Date'].strftime('%Y-%m-%d') != date:
+                result["note"] = f"Requested date {date} was not a trading day. Showing nearest trading day."
+            
+        else:
+            # Get data for exact date only
+            start_date = target_date
+            end_date = target_date + pd.Timedelta(days=1)
+            hist_data = company.history(start=start_date, end=end_date, interval="1d")
+            
+            if hist_data.empty:
+                return f"No trading data found for {ticker} on {date}. This might be a weekend or holiday. Use find_nearest=true to get nearest trading day."
+            
+            # Get the exact date data
+            hist_data = hist_data.reset_index()
+            row = hist_data.iloc[0]
+            
+            result = {
+                "ticker": ticker,
+                "date": row['Date'].strftime('%Y-%m-%d'),
+                "open": row['Open'],
+                "high": row['High'],
+                "low": row['Low'], 
+                "close": row['Close'],
+                "volume": row['Volume'],
+                "adj_close": row['Adj Close']
+            }
+        
+        return json.dumps(result)
+        
+    except Exception as e:
+        print(f"Error: getting stock price by date for {ticker}: {e}")
+        return f"Error: getting stock price by date for {ticker}: {e}"
 
 
 @yfinance_server.tool(
