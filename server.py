@@ -38,6 +38,8 @@ yfinance_server = FastMCP(
 
 This server is used to get information about a given ticker symbol from yahoo finance.
 
+IMPORTANT: All historical price data returned by this server (Open, High, Low, Close) are automatically adjusted for dividends and stock splits. This ensures accurate historical comparisons and backtesting.
+
 Available tools:
 - get_historical_stock_prices: Get historical stock prices for a given ticker symbol from yahoo finance. Include the following information: Date, Open, High, Low, Close, Volume, Adj Close.
 - get_stock_price_by_date: Get stock price for a specific date. More efficient than historical prices when you only need one date. Can find nearest trading day for weekends/holidays.
@@ -56,21 +58,34 @@ Available tools:
 @yfinance_server.tool(
     name="get_historical_stock_prices",
     description="""Get historical stock prices for a given ticker symbol from yahoo finance. Include the following information: Date, Open, High, Low, Close, Volume, Adj Close.
+
+IMPORTANT: All price data (Open, High, Low, Close) are automatically adjusted for dividends and stock splits. This means historical prices are adjusted to reflect the current value, making them suitable for accurate historical comparisons and backtesting.
+
 Args:
     ticker: str
         The ticker symbol of the stock to get historical prices for, e.g. "AAPL"
     period : str
         Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
-        Either Use period parameter or use start and end
+        Used only when both start_date and end_date are not provided
         Default is "1mo"
     interval : str
         Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
         Intraday data cannot extend last 60 days
         Default is "1d"
+    start_date: str (optional)
+        The start date for historical data (format: 'YYYY-MM-DD'), e.g. "2024-01-01"
+        If provided, period parameter will be ignored
+    end_date: str (optional)
+        The end date for historical data (format: 'YYYY-MM-DD'), e.g. "2024-12-31"
+        If not provided, defaults to current date
 """,
 )
 async def get_historical_stock_prices(
-    ticker: str, period: str = "1mo", interval: str = "1d"
+    ticker: str,
+    period: str = "1mo",
+    interval: str = "1d",
+    start_date: str | None = None,
+    end_date: str | None = None
 ) -> str:
     """Get historical stock prices for a given ticker symbol
 
@@ -79,13 +94,21 @@ async def get_historical_stock_prices(
             The ticker symbol of the stock to get historical prices for, e.g. "AAPL"
         period : str
             Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
-            Either Use period parameter or use start and end
+            Used only when both start_date and end_date are not provided
             Default is "1mo"
         interval : str
             Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
             Intraday data cannot extend last 60 days
             Default is "1d"
+        start_date: str (optional)
+            The start date for historical data (format: 'YYYY-MM-DD')
+            If provided, period parameter will be ignored
+        end_date: str (optional)
+            The end date for historical data (format: 'YYYY-MM-DD')
+            If not provided, defaults to current date
     """
+    import datetime
+
     company = yf.Ticker(ticker)
     try:
         if company.isin is None:
@@ -95,16 +118,82 @@ async def get_historical_stock_prices(
         print(f"Error: getting historical stock prices for {ticker}: {e}")
         return f"Error: getting historical stock prices for {ticker}: {e}"
 
-    # If the company is found, get the historical data
-    hist_data = company.history(period=period, interval=interval)
-    hist_data = hist_data.reset_index(names="Date")
-    hist_data = hist_data.to_json(orient="records", date_format="iso")
-    return hist_data
+    # Calculate the actual start and end dates based on provided parameters
+    actual_start = None
+    actual_end = None
+    use_period = True
+
+    # If start_date or end_date is provided, we don't use period
+    if start_date is not None or end_date is not None:
+        use_period = False
+
+        # Parse and validate dates
+        try:
+            if start_date is not None:
+                actual_start = pd.to_datetime(start_date)
+            if end_date is not None:
+                actual_end = pd.to_datetime(end_date)
+        except Exception as e:
+            return f"Error: Invalid date format. Please use YYYY-MM-DD format, e.g. '2024-01-15'. {e}"
+
+        # Apply date calculation logic
+        if start_date is not None and end_date is not None:
+            # Both provided: use as is
+            pass
+        elif start_date is not None and end_date is None:
+            # Only start_date: end defaults to current date
+            actual_end = pd.Timestamp.now()
+        elif start_date is None and end_date is not None:
+            # Only end_date: start = end - period
+            actual_end_temp = actual_end
+            # Calculate start based on period
+            period_map = {
+                "1d": pd.DateOffset(days=1),
+                "5d": pd.DateOffset(days=5),
+                "1mo": pd.DateOffset(months=1),
+                "3mo": pd.DateOffset(months=3),
+                "6mo": pd.DateOffset(months=6),
+                "1y": pd.DateOffset(years=1),
+                "2y": pd.DateOffset(years=2),
+                "5y": pd.DateOffset(years=5),
+                "10y": pd.DateOffset(years=10),
+                "ytd": None,  # Will be calculated separately
+                "max": None   # Will use a very old date
+            }
+
+            if period == "ytd":
+                # Year to date: start from beginning of current year
+                actual_start = pd.Timestamp(datetime.datetime(actual_end_temp.year, 1, 1))
+            elif period == "max":
+                # Max: use a date far in the past
+                actual_start = pd.Timestamp("1900-01-01")
+            elif period in period_map:
+                actual_start = actual_end_temp - period_map[period]
+            else:
+                return f"Error: Invalid period '{period}'. Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max"
+
+    # Get historical data with unified logic
+    try:
+        if use_period:
+            # Use period parameter (original behavior)
+            hist_data = company.history(period=period, interval=interval)
+        else:
+            # Use start and end dates
+            hist_data = company.history(start=actual_start, end=actual_end, interval=interval)
+
+        hist_data = hist_data.reset_index(names="Date")
+        hist_data = hist_data.to_json(orient="records", date_format="iso")
+        return hist_data
+    except Exception as e:
+        print(f"Error: getting historical stock prices for {ticker}: {e}")
+        return f"Error: getting historical stock prices for {ticker}: {e}"
 
 
 @yfinance_server.tool(
     name="get_stock_price_by_date",
     description="""Get stock price for a specific date. This tool is more efficient than getting historical prices when you only need data for one specific date.
+
+IMPORTANT: All price data (open, high, low, close) are automatically adjusted for dividends and stock splits. This means historical prices are adjusted to reflect the current value, making them suitable for accurate historical comparisons.
 
 Args:
     ticker: str
