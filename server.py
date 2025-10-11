@@ -38,8 +38,6 @@ yfinance_server = FastMCP(
 
 This server is used to get information about a given ticker symbol from yahoo finance.
 
-IMPORTANT: All historical price data returned by this server (Open, High, Low, Close) are automatically adjusted for dividends and stock splits. This ensures accurate historical comparisons and backtesting.
-
 Available tools:
 - get_historical_stock_prices: Get historical stock prices for a given ticker symbol from yahoo finance. Include the following information: Date, Open, High, Low, Close, Volume, Adj Close.
 - get_stock_price_by_date: Get stock price for a specific date. More efficient than historical prices when you only need one date. Can find nearest trading day for weekends/holidays.
@@ -57,9 +55,7 @@ Available tools:
 
 @yfinance_server.tool(
     name="get_historical_stock_prices",
-    description="""Get historical stock prices for a given ticker symbol from yahoo finance. Include the following information: Date, Open, High, Low, Close, Volume, Adj Close.
-
-IMPORTANT: All price data (Open, High, Low, Close) are automatically adjusted for dividends and stock splits. This means historical prices are adjusted to reflect the current value, making them suitable for accurate historical comparisons and backtesting.
+    description="""Get historical stock prices for a given ticker symbol from yahoo finance. Include the following information: Date, Open, High, Low, Close, Volume, Dividends, Stock Splits, and optionally Adj Close.
 
 Args:
     ticker: str
@@ -78,6 +74,10 @@ Args:
     end_date: str (optional)
         The end date for historical data (format: 'YYYY-MM-DD'), e.g. "2024-12-31"
         If not provided, defaults to current date
+    auto_adjust: bool (optional)
+        If True (default), returns prices adjusted for dividends and stock splits (Open, High, Low, Close are adjusted)
+        If False, returns raw unadjusted prices and includes 'Adj Close' column
+        Default is True
 """,
 )
 async def get_historical_stock_prices(
@@ -85,7 +85,8 @@ async def get_historical_stock_prices(
     period: str = "1mo",
     interval: str = "1d",
     start_date: str | None = None,
-    end_date: str | None = None
+    end_date: str | None = None,
+    auto_adjust: bool = True
 ) -> str:
     """Get historical stock prices for a given ticker symbol
 
@@ -106,6 +107,10 @@ async def get_historical_stock_prices(
         end_date: str (optional)
             The end date for historical data (format: 'YYYY-MM-DD')
             If not provided, defaults to current date
+        auto_adjust: bool (optional)
+            If True (default), returns prices adjusted for dividends and stock splits
+            If False, returns raw unadjusted prices and includes 'Adj Close' column
+            Default is True
     """
     import datetime
 
@@ -176,10 +181,10 @@ async def get_historical_stock_prices(
     try:
         if use_period:
             # Use period parameter (original behavior)
-            hist_data = company.history(period=period, interval=interval)
+            hist_data = company.history(period=period, interval=interval, auto_adjust=auto_adjust)
         else:
             # Use start and end dates
-            hist_data = company.history(start=actual_start, end=actual_end, interval=interval)
+            hist_data = company.history(start=actual_start, end=actual_end, interval=interval, auto_adjust=auto_adjust)
 
         hist_data = hist_data.reset_index(names="Date")
         hist_data = hist_data.to_json(orient="records", date_format="iso")
@@ -193,8 +198,6 @@ async def get_historical_stock_prices(
     name="get_stock_price_by_date",
     description="""Get stock price for a specific date. This tool is more efficient than getting historical prices when you only need data for one specific date.
 
-IMPORTANT: All price data (open, high, low, close) are automatically adjusted for dividends and stock splits. This means historical prices are adjusted to reflect the current value, making them suitable for accurate historical comparisons.
-
 Args:
     ticker: str
         The ticker symbol of the stock to get price for, e.g. "AAPL"
@@ -203,15 +206,20 @@ Args:
     find_nearest: bool
         If True and the exact date has no trading data (weekend/holiday), return the nearest trading day data.
         If False, return error for non-trading days. Default is True.
+    auto_adjust: bool (optional)
+        If True (default), returns prices adjusted for dividends and stock splits
+        If False, returns raw unadjusted prices
+        Default is True
 """,
 )
-async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = True) -> str:
+async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = True, auto_adjust: bool = True) -> str:
     """Get stock price for a specific date
-    
+
     Args:
         ticker: The ticker symbol of the stock
         date: The specific date (format: 'YYYY-MM-DD')
         find_nearest: Whether to find nearest trading day if exact date has no data
+        auto_adjust: If True, returns adjusted prices; if False, returns raw prices
     """
     import datetime
     
@@ -239,7 +247,7 @@ async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = T
             # Get data for a wider range to find nearest trading day
             start_date = target_date - pd.Timedelta(days=7)
             end_date = target_date + pd.Timedelta(days=7)
-            hist_data = company.history(start=start_date, end=end_date, interval="1d")
+            hist_data = company.history(start=start_date, end=end_date, interval="1d", auto_adjust=auto_adjust)
             
             if hist_data.empty:
                 return f"No trading data found for {ticker} around date {date}"
@@ -272,7 +280,7 @@ async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = T
             # Get data for exact date only
             start_date = target_date
             end_date = target_date + pd.Timedelta(days=1)
-            hist_data = company.history(start=start_date, end=end_date, interval="1d")
+            hist_data = company.history(start=start_date, end=end_date, interval="1d", auto_adjust=auto_adjust)
             
             if hist_data.empty:
                 return f"No trading data found for {ticker} on {date}. This might be a weekend or holiday. Use find_nearest=true to get nearest trading day."
