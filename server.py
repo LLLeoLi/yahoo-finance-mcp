@@ -121,7 +121,7 @@ async def get_historical_stock_prices(
             return f"Company ticker {ticker} not found."
     except Exception as e:
         print(f"Error: getting historical stock prices for {ticker}: {e}")
-        return f"Error: getting historical stock prices for {ticker}: {e}"
+        raise
 
     # Calculate the actual start and end dates based on provided parameters
     actual_start = None
@@ -139,7 +139,7 @@ async def get_historical_stock_prices(
             if end_date is not None:
                 actual_end = pd.to_datetime(end_date)
         except Exception as e:
-            return f"Error: Invalid date format. Please use YYYY-MM-DD format, e.g. '2024-01-15'. {e}"
+            raise ValueError(f"Error: Invalid date format. Please use YYYY-MM-DD format, e.g. '2024-01-15'. {e}") from e
 
         # Apply date calculation logic
         if start_date is not None and end_date is not None:
@@ -175,7 +175,7 @@ async def get_historical_stock_prices(
             elif period in period_map:
                 actual_start = actual_end_temp - period_map[period]
             else:
-                return f"Error: Invalid period '{period}'. Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max"
+                raise ValueError(f"Error: Invalid period '{period}'. Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max")
 
     # Get historical data with unified logic
     try:
@@ -191,7 +191,7 @@ async def get_historical_stock_prices(
         return hist_data
     except Exception as e:
         print(f"Error: getting historical stock prices for {ticker}: {e}")
-        return f"Error: getting historical stock prices for {ticker}: {e}"
+        raise
 
 
 @yfinance_server.tool(
@@ -230,17 +230,17 @@ async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = T
             return f"Company ticker {ticker} not found."
     except Exception as e:
         print(f"Error: getting stock price for {ticker}: {e}")
-        return f"Error: getting stock price for {ticker}: {e}"
+        raise
     
     # Validate date format
     try:
         target_date = pd.to_datetime(date).tz_localize(None)  # Remove timezone info
     except Exception as e:
-        return f"Error: Invalid date format '{date}'. Please use YYYY-MM-DD format, e.g. '2024-01-15'"
+        raise ValueError(f"Error: Invalid date format '{date}'. Please use YYYY-MM-DD format, e.g. '2024-01-15'") from e
     
     # Check if date is in the future
     if target_date > pd.Timestamp.now().tz_localize(None):  # Remove timezone info for comparison
-        return f"Error: Cannot get stock price for future date {date}"
+        raise ValueError(f"Error: Cannot get stock price for future date {date}")
     
     try:
         if find_nearest:
@@ -307,7 +307,7 @@ async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = T
         
     except Exception as e:
         print(f"Error: getting stock price by date for {ticker}: {e}")
-        return f"Error: getting stock price by date for {ticker}: {e}"
+        raise
 
 
 @yfinance_server.tool(
@@ -329,7 +329,7 @@ async def get_stock_info(ticker: str) -> str:
             return f"Company ticker {ticker} not found."
     except Exception as e:
         print(f"Error: getting stock information for {ticker}: {e}")
-        return f"Error: getting stock information for {ticker}: {e}"
+        raise
     info = company.info
     return json.dumps(info)
 
@@ -357,14 +357,14 @@ async def get_yahoo_finance_news(ticker: str) -> str:
             return f"Company ticker {ticker} not found."
     except Exception as e:
         print(f"Error: getting news for {ticker}: {e}")
-        return f"Error: getting news for {ticker}: {e}"
+        raise
 
     # If the company is found, get the news
     try:
         news = company.news
     except Exception as e:
         print(f"Error: getting news for {ticker}: {e}")
-        return f"Error: getting news for {ticker}: {e}"
+        raise
 
     news_list = []
     for news in company.news:
@@ -397,7 +397,7 @@ async def get_stock_actions(ticker: str) -> str:
         company = yf.Ticker(ticker)
     except Exception as e:
         print(f"Error: getting stock actions for {ticker}: {e}")
-        return f"Error: getting stock actions for {ticker}: {e}"
+        raise
     actions_df = company.actions
     actions_df = actions_df.reset_index(names="Date")
     return actions_df.to_json(orient="records", date_format="iso")
@@ -424,7 +424,7 @@ async def get_financial_statement(ticker: str, financial_type: str) -> str:
             return f"Company ticker {ticker} not found."
     except Exception as e:
         print(f"Error: getting financial statement for {ticker}: {e}")
-        return f"Error: getting financial statement for {ticker}: {e}"
+        raise
 
     if financial_type == FinancialType.income_stmt:
         financial_statement = company.income_stmt
@@ -439,7 +439,7 @@ async def get_financial_statement(ticker: str, financial_type: str) -> str:
     elif financial_type == FinancialType.quarterly_cashflow:
         financial_statement = company.quarterly_cashflow
     else:
-        return f"Error: invalid financial type {financial_type}. Please use one of the following: {FinancialType.income_stmt}, {FinancialType.quarterly_income_stmt}, {FinancialType.balance_sheet}, {FinancialType.quarterly_balance_sheet}, {FinancialType.cashflow}, {FinancialType.quarterly_cashflow}."
+        raise ValueError(f"Error: invalid financial type {financial_type}. Please use one of the following: {FinancialType.income_stmt}, {FinancialType.quarterly_income_stmt}, {FinancialType.balance_sheet}, {FinancialType.quarterly_balance_sheet}, {FinancialType.cashflow}, {FinancialType.quarterly_cashflow}.")
 
     # Create a list to store all the json objects
     result = []
@@ -485,7 +485,7 @@ async def get_holder_info(ticker: str, holder_type: str) -> str:
             return f"Company ticker {ticker} not found."
     except Exception as e:
         print(f"Error: getting holder info for {ticker}: {e}")
-        return f"Error: getting holder info for {ticker}: {e}"
+        raise
 
     if holder_type == HolderType.major_holders:
         return company.major_holders.reset_index(names="metric").to_json(orient="records")
@@ -500,7 +500,7 @@ async def get_holder_info(ticker: str, holder_type: str) -> str:
     elif holder_type == HolderType.insider_roster_holders:
         return company.insider_roster_holders.to_json(orient="records", date_format="iso")
     else:
-        return f"Error: invalid holder type {holder_type}. Please use one of the following: {HolderType.major_holders}, {HolderType.institutional_holders}, {HolderType.mutualfund_holders}, {HolderType.insider_transactions}, {HolderType.insider_purchases}, {HolderType.insider_roster_holders}."
+        raise ValueError(f"Error: invalid holder type {holder_type}. Please use one of the following: {HolderType.major_holders}, {HolderType.institutional_holders}, {HolderType.mutualfund_holders}, {HolderType.insider_transactions}, {HolderType.insider_purchases}, {HolderType.insider_roster_holders}.")
 
 
 @yfinance_server.tool(
@@ -522,7 +522,7 @@ async def get_option_expiration_dates(ticker: str) -> str:
             return f"Company ticker {ticker} not found."
     except Exception as e:
         print(f"Error: getting option expiration dates for {ticker}: {e}")
-        return f"Error: getting option expiration dates for {ticker}: {e}"
+        raise
     return json.dumps(company.options)
 
 
@@ -558,15 +558,15 @@ async def get_option_chain(ticker: str, expiration_date: str, option_type: str) 
             return f"Company ticker {ticker} not found."
     except Exception as e:
         print(f"Error: getting option chain for {ticker}: {e}")
-        return f"Error: getting option chain for {ticker}: {e}"
+        raise
 
     # Check if the expiration date is valid
     if expiration_date not in company.options:
-        return f"Error: No options available for the date {expiration_date}. You can use `get_option_expiration_dates` to get the available expiration dates."
+        raise ValueError(f"Error: No options available for the date {expiration_date}. You can use `get_option_expiration_dates` to get the available expiration dates.")
 
     # Check if the option type is valid
     if option_type not in ["calls", "puts"]:
-        return "Error: Invalid option type. Please use 'calls' or 'puts'."
+        raise ValueError("Error: Invalid option type. Please use 'calls' or 'puts'.")
 
     # Get the option chain
     option_chain = company.option_chain(expiration_date)
@@ -575,7 +575,7 @@ async def get_option_chain(ticker: str, expiration_date: str, option_type: str) 
     elif option_type == "puts":
         return option_chain.puts.to_json(orient="records", date_format="iso")
     else:
-        return f"Error: invalid option type {option_type}. Please use one of the following: calls, puts."
+        raise ValueError(f"Error: invalid option type {option_type}. Please use one of the following: calls, puts.")
 
 
 @yfinance_server.tool(
@@ -600,7 +600,7 @@ async def get_recommendations(ticker: str, recommendation_type: str, months_back
             return f"Company ticker {ticker} not found."
     except Exception as e:
         print(f"Error: getting recommendations for {ticker}: {e}")
-        return f"Error: getting recommendations for {ticker}: {e}"
+        raise
     try:
         if recommendation_type == RecommendationType.recommendations:
             return company.recommendations.to_json(orient="records")
@@ -617,7 +617,7 @@ async def get_recommendations(ticker: str, recommendation_type: str, months_back
             return latest_by_firm.to_json(orient="records", date_format="iso")
     except Exception as e:
         print(f"Error: getting recommendations for {ticker}: {e}")
-        return f"Error: getting recommendations for {ticker}: {e}"
+        raise
 
 
 if __name__ == "__main__":
