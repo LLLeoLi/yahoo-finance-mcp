@@ -118,7 +118,7 @@ async def get_historical_stock_prices(
     try:
         if company.isin is None:
             print(f"Company ticker {ticker} not found.")
-            return f"Company ticker {ticker} not found."
+            raise ValueError(f"Company ticker {ticker} not found.")
     except Exception as e:
         print(f"Error: getting historical stock prices for {ticker}: {e}")
         raise
@@ -227,7 +227,7 @@ async def get_stock_price_by_date(ticker: str, date: str, find_nearest: bool = T
     try:
         if company.isin is None:
             print(f"Company ticker {ticker} not found.")
-            return f"Company ticker {ticker} not found."
+            raise ValueError(f"Company ticker {ticker} not found.")
     except Exception as e:
         print(f"Error: getting stock price for {ticker}: {e}")
         raise
@@ -326,7 +326,7 @@ async def get_stock_info(ticker: str) -> str:
     try:
         if company.isin is None:
             print(f"Company ticker {ticker} not found.")
-            return f"Company ticker {ticker} not found."
+            raise ValueError(f"Company ticker {ticker} not found.")
     except Exception as e:
         print(f"Error: getting stock information for {ticker}: {e}")
         raise
@@ -354,7 +354,7 @@ async def get_yahoo_finance_news(ticker: str) -> str:
     try:
         if company.isin is None:
             print(f"Company ticker {ticker} not found.")
-            return f"Company ticker {ticker} not found."
+            raise ValueError(f"Company ticker {ticker} not found.")
     except Exception as e:
         print(f"Error: getting news for {ticker}: {e}")
         raise
@@ -421,7 +421,7 @@ async def get_financial_statement(ticker: str, financial_type: str) -> str:
     try:
         if company.isin is None:
             print(f"Company ticker {ticker} not found.")
-            return f"Company ticker {ticker} not found."
+            raise ValueError(f"Company ticker {ticker} not found.")
     except Exception as e:
         print(f"Error: getting financial statement for {ticker}: {e}")
         raise
@@ -482,7 +482,7 @@ async def get_holder_info(ticker: str, holder_type: str) -> str:
     try:
         if company.isin is None:
             print(f"Company ticker {ticker} not found.")
-            return f"Company ticker {ticker} not found."
+            raise ValueError(f"Company ticker {ticker} not found.")
     except Exception as e:
         print(f"Error: getting holder info for {ticker}: {e}")
         raise
@@ -519,7 +519,7 @@ async def get_option_expiration_dates(ticker: str) -> str:
     try:
         if company.isin is None:
             print(f"Company ticker {ticker} not found.")
-            return f"Company ticker {ticker} not found."
+            raise ValueError(f"Company ticker {ticker} not found.")
     except Exception as e:
         print(f"Error: getting option expiration dates for {ticker}: {e}")
         raise
@@ -555,7 +555,7 @@ async def get_option_chain(ticker: str, expiration_date: str, option_type: str) 
     try:
         if company.isin is None:
             print(f"Company ticker {ticker} not found.")
-            return f"Company ticker {ticker} not found."
+            raise ValueError(f"Company ticker {ticker} not found.")
     except Exception as e:
         print(f"Error: getting option chain for {ticker}: {e}")
         raise
@@ -597,7 +597,7 @@ async def get_recommendations(ticker: str, recommendation_type: str, months_back
     try:
         if company.isin is None:
             print(f"Company ticker {ticker} not found.")
-            return f"Company ticker {ticker} not found."
+            raise ValueError(f"Company ticker {ticker} not found.")
     except Exception as e:
         print(f"Error: getting recommendations for {ticker}: {e}")
         raise
